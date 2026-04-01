@@ -21,12 +21,12 @@ except Exception as e:
     print(f"Помилка AI: {e}")
     sys.exit(1)
 
-# ПЕРЕХІД НА BYBIT (щоб уникнути помилки 451 на Railway)
+# ПРАВИЛЬНИЙ BYBIT
 ex = ccxt.bybit({'enableRateLimit': True})
+bot = telebot.TeleBot(TG_TOKEN, threaded=False)
 
 def get_data(tf='5m'):
     try:
-        # Bybit добре працює з серверами Railway
         ohlcv = ex.fetch_ohlcv('BTC/USDT', timeframe=tf, limit=50)
         df = pd.DataFrame(ohlcv, columns=['t', 'o', 'h', 'l', 'c', 'v'])
         
@@ -41,13 +41,11 @@ def get_data(tf='5m'):
         print(f"Помилка Bybit: {e}")
         return None, None
 
-@bot_message_handler = telebot.TeleBot(TG_TOKEN, threaded=False)
-
-@bot_message_handler.message_handler(commands=['start'])
+@bot.message_handler(commands=['start'])
 def send_welcome(m):
-    bot_message_handler.reply_to(m, "Бот на Bybit активний. Команди: /now, /stats")
+    bot.reply_to(m, "Бот на Bybit активний. Команди: /now, /stats")
 
-@bot_message_handler.message_handler(commands=['stats'])
+@bot.message_handler(commands=['stats'])
 def send_stats(m):
     uptime_sec = int(time.time() - stats["start_time"])
     hours = uptime_sec // 3600
@@ -55,9 +53,9 @@ def send_stats(m):
     msg = (f"📈 **Bybit Статистика**:\n"
            f"• Сигналів: {stats['signals_sent']}\n"
            f"• Час роботи: {hours}г {minutes}хв")
-    bot_message_handler.reply_to(m, msg)
+    bot.reply_to(m, msg)
 
-@bot_message_handler.message_handler(commands=['now', 'analysis'])
+@bot.message_handler(commands=['now', 'analysis'])
 def handle_commands(m):
     rsi, price = get_data()
     if rsi and price:
@@ -65,11 +63,11 @@ def handle_commands(m):
         prompt = f"{SYS_PROMPT}\nBTC: {price}, RSI: {rsi:.1f}. Що робити?"
         try:
             res = client.models.generate_content(model=MODEL, contents=prompt)
-            bot_message_handler.reply_to(m, f"📊 **BTC (Bybit)**: {price}$\n📈 **RSI**: {rsi:.1f}\n💀 **Liq**: {liq_l:.0f}/{liq_s:.0f}\n\n🤖: {res.text}")
+            bot.reply_to(m, f"📊 **BTC (Bybit)**: {price:.1f}$\n📈 **RSI**: {rsi:.1f}\n💀 **Liq**: {liq_l:.0f}/{liq_s:.0f}\n\n🤖: {res.text}")
         except:
-            bot_message_handler.reply_to(m, f"📊 BTC: {price}, RSI: {rsi:.1f}. AI тимчасово спить.")
+            bot.reply_to(m, f"📊 BTC: {price}, RSI: {rsi:.1f}. AI тимчасово спить.")
     else:
-        bot_message_handler.reply_to(m, "Біржа не відповідає. Спробую ще раз за мить.")
+        bot.reply_to(m, "Біржа не відповідає. Перевір логи Railway.")
 
 def monitoring():
     while True:
@@ -78,7 +76,7 @@ def monitoring():
             if rsi and (rsi < 29 or rsi > 71):
                 prompt = f"{SYS_PROMPT}\nBTC RSI {rsi:.1f}, Ціна {price}. Дай сигнал!"
                 res = client.models.generate_content(model=MODEL, contents=prompt)
-                bot_message_handler.send_message(CHAT_ID, f"🚨 **СИГНАЛ**: {rsi:.1f}\n{res.text}")
+                bot.send_message(CHAT_ID, f"🚨 **СИГНАЛ**: {rsi:.1f}\n{res.text}")
                 stats["signals_sent"] += 1
                 time.sleep(600)
             time.sleep(30)
@@ -87,12 +85,10 @@ def monitoring():
 
 if __name__ == "__main__":
     threading.Thread(target=monitoring, daemon=True).start()
-    print("Бот запущений на Bybit. Конфліктів не виявлено.")
-    
-    # Виправлений запуск для Railway
-    bot = bot_message_handler
+    print("Бот в строю. Railway активний.")
     while True:
         try:
             bot.polling(none_stop=True, interval=1, timeout=40)
         except Exception as e:
+            print(f"Помилка: {e}")
             time.sleep(5)
